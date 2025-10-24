@@ -1,37 +1,163 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WhatsApp Call Handler</title>
+    <title>WhatsApp Audio Call Handler</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .call-info { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .controls { margin: 10px 0; }
-        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
-        .answer { background: #4CAF50; color: white; }
-        .hangup { background: #f44336; color: white; }
-        #status { font-weight: bold; margin: 10px 0; }
-        video { width: 300px; height: 200px; background: #000; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            width: 90%;
+        }
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 300;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        #status {
+            font-size: 16px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .call-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .caller-info {
+            margin-bottom: 25px;
+        }
+        .caller-name {
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        .caller-number {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        .call-controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 24px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-answer {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-answer:hover {
+            background: #45a049;
+            transform: scale(1.1);
+        }
+        .btn-hangup {
+            background: #f44336;
+            color: white;
+        }
+        .btn-hangup:hover {
+            background: #da190b;
+            transform: scale(1.1);
+        }
+        .audio-visualizer {
+            display: none;
+            margin: 20px 0;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+        .audio-bars {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 3px;
+        }
+        .bar {
+            width: 4px;
+            background: white;
+            border-radius: 2px;
+            animation: audioWave 1.5s ease-in-out infinite;
+        }
+        .bar:nth-child(2) { animation-delay: 0.1s; }
+        .bar:nth-child(3) { animation-delay: 0.2s; }
+        .bar:nth-child(4) { animation-delay: 0.3s; }
+        .bar:nth-child(5) { animation-delay: 0.4s; }
+        @keyframes audioWave {
+            0%, 100% { height: 10px; }
+            50% { height: 40px; }
+        }
+        .hidden { display: none !important; }
+        audio { display: none; }
     </style>
 </head>
 <body>
-    <h1>WhatsApp Call Handler</h1>
-    <div id="status">Connecting...</div>
-    
-    <div id="callInfo" style="display: none;" class="call-info">
-        <h3>Incoming Call</h3>
-        <p>From: <span id="caller"></span></p>
-        <p>To: <span id="callee"></span></p>
-        <p>Call ID: <span id="callId"></span></p>
+    <div class="container">
+        <div class="logo">📞</div>
+        <h1>WhatsApp Call Handler</h1>
+        <div id="status">Connecting...</div>
         
-        <div class="controls">
-            <button id="answerBtn" class="answer">Answer Call</button>
-            <button id="hangupBtn" class="hangup" style="display: none;">Hang Up</button>
+        <div id="callInfo" class="call-card hidden">
+            <div class="caller-info">
+                <div class="caller-name" id="caller"></div>
+                <div class="caller-number">Incoming call</div>
+            </div>
+            
+            <div class="audio-visualizer" id="audioVisualizer">
+                <div class="audio-bars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+            </div>
+            
+            <div class="call-controls">
+                <button id="answerBtn" class="btn btn-answer" title="Answer">📞</button>
+                <button id="hangupBtn" class="btn btn-hangup hidden" title="Hang Up">📵</button>
+            </div>
         </div>
-    </div>
-    
-    <div>
-        <video id="localVideo" autoplay muted></video>
-        <video id="remoteVideo" autoplay></video>
+        
+        <audio id="remoteAudio" autoplay></audio>
     </div>
 
     <script>
@@ -64,12 +190,10 @@
             currentCall = callData;
             
             document.getElementById('caller').textContent = callData.from;
-            document.getElementById('callee').textContent = callData.to;
-            document.getElementById('callId').textContent = callData.callId;
             
-            callInfo.style.display = 'block';
-            answerBtn.style.display = 'inline-block';
-            hangupBtn.style.display = 'none';
+            callInfo.classList.remove('hidden');
+            answerBtn.classList.remove('hidden');
+            hangupBtn.classList.add('hidden');
             
             status.textContent = 'Incoming call...';
             
@@ -79,12 +203,10 @@
 
         async function setupWebRTC(remoteSdp) {
             try {
-                // Get user media
+                // Get user media (audio only)
                 localStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
                     audio: true 
                 });
-                document.getElementById('localVideo').srcObject = localStream;
 
                 // Create peer connection
                 peerConnection = new RTCPeerConnection({
@@ -98,7 +220,7 @@
 
                 // Handle remote stream
                 peerConnection.ontrack = (event) => {
-                    document.getElementById('remoteVideo').srcObject = event.streams[0];
+                    document.getElementById('remoteAudio').srcObject = event.streams[0];
                 };
                 
                 // Handle ICE candidates (required for WebRTC)
@@ -149,8 +271,8 @@
                     };
                 }
 
-                answerBtn.style.display = 'none';
-                hangupBtn.style.display = 'inline-block';
+                answerBtn.classList.add('hidden');
+                hangupBtn.classList.remove('hidden');
                 status.textContent = 'Gathering ICE candidates...';
                 
             } catch (error) {
@@ -173,6 +295,7 @@
             
             currentCall.preAcceptSent = true;
             status.textContent = 'Connecting...';
+            document.getElementById('audioVisualizer').style.display = 'block';
             
             // Accept will be sent when connection is established
         }
@@ -189,7 +312,7 @@
             }));
             
             currentCall.preAcceptSent = false;
-            status.textContent = 'Call answered';
+            status.textContent = '🔊 Call in progress';
         }
 
         hangupBtn.onclick = () => {
@@ -221,10 +344,10 @@
                 localStream = null;
             }
             
-            document.getElementById('localVideo').srcObject = null;
-            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('remoteAudio').srcObject = null;
+            document.getElementById('audioVisualizer').style.display = 'none';
             
-            callInfo.style.display = 'none';
+            callInfo.classList.add('hidden');
             currentCall = null;
             
             setTimeout(() => {

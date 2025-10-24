@@ -33,16 +33,23 @@ if (!verifyToken) {
 // Store active WebSocket connections
 let wsClients = new Set();
 
-// Route for GET requests
+// Route for webhook verification
 app.get('/', (req, res) => {
   const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
 
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log('WEBHOOK VERIFIED');
-    res.status(200).send(challenge);
-  } else {
-    res.status(403).end();
+  // If webhook verification parameters are present
+  if (mode && challenge && token) {
+    if (mode === 'subscribe' && token === verifyToken) {
+      console.log('WEBHOOK VERIFIED');
+      res.status(200).send(challenge);
+    } else {
+      res.status(403).end();
+    }
+    return;
   }
+  
+  // Otherwise, serve the web client
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // WebSocket connection handling
