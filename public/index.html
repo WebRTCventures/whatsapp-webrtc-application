@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatsApp Call Handler</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .call-info { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .controls { margin: 10px 0; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .answer { background: #4CAF50; color: white; }
+        .hangup { background: #f44336; color: white; }
+        #status { font-weight: bold; margin: 10px 0; }
+        video { width: 300px; height: 200px; background: #000; }
+    </style>
+</head>
+<body>
+    <h1>WhatsApp Call Handler</h1>
+    <div id="status">Connecting...</div>
+    
+    <div id="callInfo" style="display: none;" class="call-info">
+        <h3>Incoming Call</h3>
+        <p>From: <span id="caller"></span></p>
+        <p>To: <span id="callee"></span></p>
+        <p>Call ID: <span id="callId"></span></p>
+        
+        <div class="controls">
+            <button id="answerBtn" class="answer">Answer Call</button>
+            <button id="hangupBtn" class="hangup" style="display: none;">Hang Up</button>
+        </div>
+    </div>
+    
+    <div>
+        <video id="localVideo" autoplay muted></video>
+        <video id="remoteVideo" autoplay></video>
+    </div>
+
+    <script>
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}`);
+        const status = document.getElementById('status');
+        const callInfo = document.getElementById('callInfo');
+        const answerBtn = document.getElementById('answerBtn');
+        const hangupBtn = document.getElementById('hangupBtn');
+        
+        let currentCall = null;
+        let peerConnection = null;
+        let localStream = null;
+
+        ws.onopen = () => {
+            status.textContent = 'Connected - Waiting for calls...';
+        };
+
+        ws.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'incoming_call') {
+                handleIncomingCall(data);
+            } else if (data.type === 'call_terminated') {
+                handleCallTerminated(data);
+            }
+        };
+
+        async function handleIncomingCall(callData) {
+            currentCall = callData;
+            
+            document.getElementById('caller').textContent = callData.from;
+            document.getElementById('callee').textContent = callData.to;
+            document.getElementById('callId').textContent = callData.callId;
+            
+            callInfo.style.display = 'block';
+            answerBtn.style.display = 'inline-block';
+            hangupBtn.style.display = 'none';
+            
+            status.textContent = 'Incoming call...';
+            
+            // Setup WebRTC
+            await setupWebRTC(callData.sdp);
+        }
+
+        async function setupWebRTC(remoteSdp) {
+            try {
+                // Get user media
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: true 
+                });
+                document.getElementById('localVideo').srcObject = localStream;
+
+                // Create peer connection
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Add local stream
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                // Handle remote stream
+                peerConnection.ontrack = (event) => {
+                    document.getElementById('remoteVideo').srcObject = event.streams[0];
+                };
+                
+                // Handle ICE candidates (required for WebRTC)
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('ICE candidate:', event.candidate);
+                    }
+                };
+                
+                // Handle connection state changes
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state:', peerConnection.connectionState);
+                    if (peerConnection.connectionState === 'connected' && currentCall?.preAcceptSent) {
+                        sendAccept();
+                    }
+                };
+
+                // Set remote description (offer from WhatsApp)
+                await peerConnection.setRemoteDescription({
+                    type: 'offer',
+                    sdp: remoteSdp
+                });
+
+                // Create answer
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                console.log('WebRTC setup complete, ready to answer');
+                
+            } catch (error) {
+                console.error('WebRTC setup error:', error);
+                status.textContent = 'Error setting up call';
+            }
+        }
+
+        answerBtn.onclick = async () => {
+            if (!peerConnection || !currentCall) return;
+            
+            try {
+                // Wait for ICE gathering to complete before sending any response
+                if (peerConnection.iceGatheringState === 'complete') {
+                    sendCallResponses();
+                } else {
+                    peerConnection.onicegatheringstatechange = () => {
+                        if (peerConnection.iceGatheringState === 'complete') {
+                            sendCallResponses();
+                        }
+                    };
+                }
+
+                answerBtn.style.display = 'none';
+                hangupBtn.style.display = 'inline-block';
+                status.textContent = 'Gathering ICE candidates...';
+                
+            } catch (error) {
+                console.error('Answer error:', error);
+                status.textContent = 'Error answering call';
+            }
+        };
+        
+        function sendCallResponses() {
+            const sdpWithIce = peerConnection.localDescription.sdp;
+            
+            // Send pre-accept with complete SDP
+            ws.send(JSON.stringify({
+                type: 'call_response',
+                action: 'pre_accept',
+                callId: currentCall.callId,
+                phoneNumberId: currentCall.phoneNumberId,
+                sdp: sdpWithIce
+            }));
+            
+            currentCall.preAcceptSent = true;
+            status.textContent = 'Connecting...';
+            
+            // Accept will be sent when connection is established
+        }
+        
+        function sendAccept() {
+            if (!currentCall?.preAcceptSent) return;
+            
+            ws.send(JSON.stringify({
+                type: 'call_response',
+                action: 'accept',
+                callId: currentCall.callId,
+                phoneNumberId: currentCall.phoneNumberId,
+                sdp: peerConnection.localDescription.sdp
+            }));
+            
+            currentCall.preAcceptSent = false;
+            status.textContent = 'Call answered';
+        }
+
+        hangupBtn.onclick = () => {
+            if (currentCall) {
+                ws.send(JSON.stringify({
+                    type: 'call_response',
+                    action: 'terminate',
+                    callId: currentCall.callId,
+                    phoneNumberId: currentCall.phoneNumberId
+                }));
+                
+                endCall();
+            }
+        };
+
+        function handleCallTerminated(data) {
+            status.textContent = `Call ended (${data.direction})`;
+            endCall();
+        }
+
+        function endCall() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            document.getElementById('localVideo').srcObject = null;
+            document.getElementById('remoteVideo').srcObject = null;
+            
+            callInfo.style.display = 'none';
+            currentCall = null;
+            
+            setTimeout(() => {
+                status.textContent = 'Connected - Waiting for calls...';
+            }, 3000);
+        }
+
+        ws.onclose = () => {
+            status.textContent = 'Disconnected - Reconnecting...';
+            // Auto-reconnect after 3 seconds
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        };
+
+        ws.onerror = (error) => {
+            status.textContent = 'Connection error';
+            console.error('WebSocket error:', error);
+        };
+    </script>
+</body>
+</html>

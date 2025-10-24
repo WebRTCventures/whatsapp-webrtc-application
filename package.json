@@ -1,0 +1,18 @@
+{
+  "name": "whatsapp-call-webhook",
+  "version": "1.0.0",
+  "description": "WhatsApp call webhook with WebRTC support",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
