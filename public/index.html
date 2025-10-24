@@ -152,6 +152,7 @@
             </div>
             
             <div class="call-controls">
+                <button id="rejectBtn" class="btn btn-hangup" title="Reject">📵</button>
                 <button id="answerBtn" class="btn btn-answer" title="Answer">📞</button>
                 <button id="hangupBtn" class="btn btn-hangup hidden" title="Hang Up">📵</button>
             </div>
@@ -166,6 +167,7 @@
         const status = document.getElementById('status');
         const callInfo = document.getElementById('callInfo');
         const answerBtn = document.getElementById('answerBtn');
+        const rejectBtn = document.getElementById('rejectBtn');
         const hangupBtn = document.getElementById('hangupBtn');
         
         let currentCall = null;
@@ -193,12 +195,10 @@
             
             callInfo.classList.remove('hidden');
             answerBtn.classList.remove('hidden');
+            rejectBtn.classList.remove('hidden');
             hangupBtn.classList.add('hidden');
             
             status.textContent = 'Incoming call...';
-            
-            // Setup WebRTC
-            await setupWebRTC(callData.sdp);
         }
 
         async function setupWebRTC(remoteSdp) {
@@ -248,7 +248,12 @@
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
 
-                console.log('WebRTC setup complete, ready to answer');
+                // Wait for ICE gathering to complete before sending response
+                peerConnection.onicegatheringstatechange = () => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        sendCallResponses();
+                    }
+                };
                 
             } catch (error) {
                 console.error('WebRTC setup error:', error);
@@ -257,23 +262,16 @@
         }
 
         answerBtn.onclick = async () => {
-            if (!peerConnection || !currentCall) return;
+            if (!currentCall) return;
             
             try {
-                // Wait for ICE gathering to complete before sending any response
-                if (peerConnection.iceGatheringState === 'complete') {
-                    sendCallResponses();
-                } else {
-                    peerConnection.onicegatheringstatechange = () => {
-                        if (peerConnection.iceGatheringState === 'complete') {
-                            sendCallResponses();
-                        }
-                    };
-                }
-
                 answerBtn.classList.add('hidden');
+                rejectBtn.classList.add('hidden');
                 hangupBtn.classList.remove('hidden');
-                status.textContent = 'Gathering ICE candidates...';
+                status.textContent = 'Setting up call...';
+                
+                // Setup WebRTC when user decides to answer
+                await setupWebRTC(currentCall.sdp);
                 
             } catch (error) {
                 console.error('Answer error:', error);
@@ -315,6 +313,19 @@
             status.textContent = '🔊 Call in progress';
         }
 
+        rejectBtn.onclick = () => {
+            if (currentCall) {
+                ws.send(JSON.stringify({
+                    type: 'call_response',
+                    action: 'terminate',
+                    callId: currentCall.callId,
+                    phoneNumberId: currentCall.phoneNumberId
+                }));
+                
+                endCall();
+            }
+        };
+        
         hangupBtn.onclick = () => {
             if (currentCall) {
                 ws.send(JSON.stringify({
